@@ -110,6 +110,7 @@ impl Emulator {
 
         let mut memory = self.memory.borrow_mut();
 
+        memory.rom_bank_number = 1;
         memory.joypad = 0xcf;
         memory.divider = 0xab;
         memory.timer = 0x00;
@@ -129,9 +130,11 @@ impl Emulator {
 
     pub fn load_rom(&mut self, rom_data: &[u8]) {
         console_error_panic_hook::set_once();
-        // currently our emulator does not support MBC.
         let n = rom_data.len();
         self.memory.borrow_mut().cart_rom[0..n].copy_from_slice(rom_data);
+        self.memory.borrow_mut().cart_type = rom_data[0x147];
+        self.memory.borrow_mut().rom_size = rom_data[0x148];
+        self.memory.borrow_mut().ram_size = rom_data[0x149];
     }
 
     pub fn tick(&mut self) {

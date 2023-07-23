@@ -9,9 +9,15 @@ extern "C" {
 }
 
 pub struct Memory {
-    pub cart_rom: [u8; 32 * 1024],
+    pub cart_rom: [u8; 8 * 1024 * 1024], // support up to 8MB rom
+    pub cart_type: u8,
+    pub rom_size: u8,
+    pub ram_size: u8,
+    pub rom_bank_number: usize,
+    pub ram_bank_number: usize,
+    pub banking_mode: bool,
     pub video_ram: [u8; 8 * 1024],
-    pub cart_ram: [u8; 8 * 1024],
+    pub cart_ram: [u8; 32 * 1024],
     pub work_ram: [u8; 8 * 1024],
     pub obj_attr_memory: [u8; 160],
     pub joypad: u8,
@@ -38,9 +44,15 @@ pub struct Memory {
 impl Memory {
     pub fn new() -> Memory {
         Memory {
-            cart_rom: [0; 32 * 1024],
+            cart_rom: [0; 8 * 1024 * 1024],
+            cart_type: 0,
+            rom_size: 0,
+            ram_size: 0,
+            rom_bank_number: 0,
+            ram_bank_number: 0,
+            banking_mode: false,
             video_ram: [0; 8 * 1024],
-            cart_ram: [0; 8 * 1024],
+            cart_ram: [0; 32 * 1024],
             work_ram: [0; 8 * 1024],
             obj_attr_memory: [0; 160],
             joypad: 0,
@@ -67,13 +79,16 @@ impl Memory {
 
     pub fn get_byte(&self, address: u16) -> u8 {
         let address = address as usize;
+        let rom_bank_number = self.rom_bank_number;
+        let ram_bank_number = self.ram_bank_number;
         match address {
-            0..=0x7fff => self.cart_rom[address],
+            0x0000..=0x3fff => self.cart_rom[address],
+            0x4000..=0x7fff => self.cart_rom[rom_bank_number * 0x4000 + address - 0x4000],
             0x8000..=0x9fff => self.video_ram[address - 0x8000],
-            0xa000..=0xbfff => self.cart_ram[address - 0xa000],
+            0xa000..=0xbfff => self.cart_ram[ram_bank_number * 0x2000 + address - 0xa000],
             0xc000..=0xdfff => self.work_ram[address - 0xc000],
             0xfe00..=0xfe9f => self.obj_attr_memory[address - 0xfe00],
-            0xff00 => self.joypad,
+            0xff00 => 0xc0 | self.joypad,
             0xff04 => self.divider,
             0xff05 => self.timer,
             0xff06 => self.timer_modulo,
@@ -103,13 +118,72 @@ impl Memory {
 
     pub fn set_byte(&mut self, address: u16, value: u8) {
         let address = address as usize;
+        let ram_bank_number = self.ram_bank_number;
+        if address <= 0x7fff {
+            if 0x1 <= self.cart_type && self.cart_type <= 0x3 {
+                // MBC1
+                match address {
+                    0x2000..=0x3fff => {
+                        let mask = match self.rom_size {
+                            0x00 => 0x1,
+                            0x01 => 0x3,
+                            0x02 => 0x7,
+                            0x03 => 0xf,
+                            _ => 0x1f,
+                        };
+                        let prev = self.rom_bank_number;
+                        self.rom_bank_number = if value == 0 {
+                            1
+                        } else {
+                            (value & mask) as usize
+                        };
+                        self.rom_bank_number |= prev & 0x60;
+                    }
+                    0x4000..=0x5fff => {
+                        if self.banking_mode {
+                            self.ram_bank_number = (value & 0x3) as usize;
+                        } else {
+                            self.rom_bank_number |= ((value & 0x3) << 5) as usize;
+                        }
+                    }
+                    0x6000..=0x7fff => {
+                        if value == 0 {
+                            // ROM bank mode (max 8KB RAM, 2MB ROM)
+                            self.banking_mode = false;
+                            self.ram_bank_number = 0;
+                        } else {
+                            // RAM bank mode (max 32KB RAM, 512KB ROM)
+                            self.banking_mode = true;
+                            self.rom_bank_number &= 0x1f;
+                        }
+                    }
+                    _ => {}
+                }
+            } else if 0x19 <= self.cart_type && self.cart_type <= 0x1b {
+                // MBC5
+                match address {
+                    0x2000..=0x2fff => {
+                        let prev = self.rom_bank_number;
+                        self.rom_bank_number = value as usize;
+                        self.rom_bank_number |= prev & 0x100;
+                    }
+                    0x3000..=0x3fff => {
+                        self.rom_bank_number |= ((value & 1) as usize) << 9;
+                    }
+                    0x4000..=0x5fff => {
+                        self.ram_bank_number = (value as usize) & 0xf;
+                    }
+                    _ => {}
+                }
+            }
+            return;
+        }
         match address {
-            0..=0x7fff => self.cart_rom[address] = value,
             0x8000..=0x9fff => self.video_ram[address - 0x8000] = value,
-            0xa000..=0xbfff => self.cart_ram[address - 0xa000] = value,
+            0xa000..=0xbfff => self.cart_ram[ram_bank_number * 0x2000 + address - 0xa000] = value,
             0xc000..=0xdfff => self.work_ram[address - 0xc000] = value,
             0xfe00..=0xfe9f => self.obj_attr_memory[address - 0xfe00] = value,
-            0xff00 => self.joypad = (value & 0x30) | (self.joypad & 0xf),
+            0xff00 => self.joypad = 0xc0 | (value & 0x30) | (self.joypad & 0xf),
             0xff01 => log(format!("{} '{}'", value, value as char).as_str()),
             0xff04 => self.divider = 0x00, // Writing any value to this register resets it to 0x00.
             0xff05 => self.timer = value,
