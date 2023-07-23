@@ -1,4 +1,4 @@
-.PHONY: wasm
+.PHONY: watch
 
-wasm:
-	wasm-pack build --target web --out-dir ../frontend/wasm
+watch:
+	find src/ | entr -r wasm-pack build --target web --out-dir ../frontend/wasm
