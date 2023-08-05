@@ -1,4 +1,5 @@
 extern crate console_error_panic_hook;
+use crate::apu::APU;
 use crate::cpu::{Flags, CPU};
 use crate::memory::Memory;
 use crate::ppu::PPU;
@@ -57,6 +58,7 @@ impl JoypadInput {
 pub struct Emulator {
     cpu: CPU,
     ppu: PPU,
+    apu: APU,
     timer: Timer,
     memory: Rc<RefCell<Memory>>,
     joypad_input: JoypadInput,
@@ -71,6 +73,7 @@ impl Emulator {
         Emulator {
             cpu: CPU::new(Rc::clone(&memory)),
             ppu: PPU::new(Rc::clone(&memory)),
+            apu: APU::new(Rc::clone(&memory)),
             timer: Timer::new(Rc::clone(&memory)),
             memory,
             joypad_input: JoypadInput::default(),
@@ -116,6 +119,12 @@ impl Emulator {
         memory.timer = 0x00;
         memory.timer_modulo = 0x00;
         memory.timer_control = 0xf8;
+        memory.interrupt_flag = 0xe1;
+        memory.nr21 = 0x3f;
+        memory.nr22 = 0x00;
+        memory.nr23 = 0xff;
+        memory.nr24 = 0xbf;
+        memory.nr52 = 0xf1;
         memory.lcd_control = 0x91;
         memory.lcd_status = 0x85;
         memory.scy = 0x00;
@@ -137,16 +146,28 @@ impl Emulator {
         self.memory.borrow_mut().ram_size = rom_data[0x149];
     }
 
+    pub fn load_savedata(&mut self, savedata: &[u8]) {
+        console_error_panic_hook::set_once();
+        let n = savedata.len();
+        self.memory.borrow_mut().cart_ram[0..n].copy_from_slice(savedata);
+    }
+
+    pub fn get_savedata(&self) -> Vec<u8> {
+        self.memory.borrow().cart_ram[..].into()
+    }
+
     pub fn tick(&mut self) {
         self.update_joypad();
         self.timer.tick();
         self.ppu.tick();
+        self.apu.tick();
         self.cpu.tick();
     }
 
     pub fn next_frame(&mut self) {
         console_error_panic_hook::set_once();
         self.ppu.clear_frame_buffer();
+        self.apu.clear_audio_buffer();
         for _ in 0..CLOCKS_PER_FRAME {
             self.tick();
         }
@@ -154,6 +175,10 @@ impl Emulator {
 
     pub fn get_frame_buffer(&self) -> Vec<u8> {
         self.ppu.frame_buffer.into()
+    }
+
+    pub fn get_audio_buffer(&self) -> Vec<f32> {
+        self.apu.audio_buffer.clone()
     }
 
     pub fn update_joypad_input(&mut self, joypad_input: JoypadInput) {

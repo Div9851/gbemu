@@ -2,7 +2,7 @@
 <html lang="ja">
 
 <head>
-  <title>Hello</title>
+  <title>Gameboy Emulator</title>
   <meta charset="utf-8">
   <link rel="stylesheet" href="index.css">
   <script type="module" src="./index.js"></script>
@@ -10,10 +10,13 @@
 
 <body>
   <main>
-    <canvas id="screen" width="160" height="144"></canvas>
+    <canvas id="screen" width="250" height="225"></canvas>
     <div>
-      <label for="rom">ROM</label>
-      <input id="rom" type="file">
+      <input id="rom" type="file" class="hidden">
+      <input id="savedata" type="file" class="hidden">
+      <button id="select-rom">Select ROM</button>
+      <button id="import-savedata">Import Save Data</button>
+      <button id="export-savedata">Export Save Data</button>
     </div>
   </main>
 </body>

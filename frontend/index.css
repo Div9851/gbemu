@@ -1,3 +1,11 @@
 #screen {
     border: 1px dotted;
 }
+
+.hidden {
+    display: none;
+}
+
+.container {
+    margin: 1em;
+}

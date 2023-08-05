@@ -1,5 +1,3 @@
-use core::panic;
-
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -25,6 +23,27 @@ pub struct Memory {
     pub timer: u8,
     pub timer_modulo: u8,
     pub timer_control: u8,
+    pub nr10: u8,
+    pub nr11: u8,
+    pub nr12: u8,
+    pub nr13: u8,
+    pub nr14: u8,
+    pub nr21: u8,
+    pub nr22: u8,
+    pub nr23: u8,
+    pub nr24: u8,
+    pub nr30: u8,
+    pub nr31: u8,
+    pub nr32: u8,
+    pub nr33: u8,
+    pub nr34: u8,
+    pub nr41: u8,
+    pub nr42: u8,
+    pub nr43: u8,
+    pub nr44: u8,
+    pub nr50: u8,
+    pub nr52: u8,
+    pub wave_ram: [u8; 16],
     pub lcd_control: u8,
     pub lcd_status: u8,
     pub scy: u8,
@@ -60,6 +79,27 @@ impl Memory {
             timer: 0,
             timer_modulo: 0,
             timer_control: 0,
+            nr10: 0,
+            nr11: 0,
+            nr12: 0,
+            nr13: 0,
+            nr14: 0,
+            nr21: 0,
+            nr22: 0,
+            nr23: 0,
+            nr24: 0,
+            nr30: 0,
+            nr31: 0,
+            nr32: 0,
+            nr33: 0,
+            nr34: 0,
+            nr41: 0,
+            nr42: 0,
+            nr43: 0,
+            nr44: 0,
+            nr50: 0,
+            nr52: 0,
+            wave_ram: [0; 16],
             lcd_control: 0,
             lcd_status: 0,
             scy: 0,
@@ -94,6 +134,27 @@ impl Memory {
             0xff06 => self.timer_modulo,
             0xff07 => self.timer_control,
             0xff0f => self.interrupt_flag,
+            0xff10 => self.nr10 | 0x80,
+            0xff11 => self.nr11 | 0x3f,
+            0xff12 => self.nr12,
+            0xff13 => 0xff, // write only
+            0xff14 => self.nr14 | 0xbf,
+            0xff16 => self.nr21 | 0x3f,
+            0xff17 => self.nr22,
+            0xff18 => 0xff, // write only
+            0xff19 => self.nr24 | 0xbf,
+            0xff1a => self.nr30 | 0x7f,
+            0xff1b => self.nr31,
+            0xff1c => self.nr32 | 0x9f,
+            0xff1d => 0xff, // write only
+            0xff1e => self.nr34 | 0xbf,
+            0xff20 => 0xff, // write only
+            0xff21 => self.nr42,
+            0xff22 => self.nr43,
+            0xff23 => self.nr44 | 0xbf,
+            0xff24 => self.nr50,
+            0xff26 => self.nr52 | 0x70,
+            0xff30..=0xff3f => self.wave_ram[address - 0xff30],
             0xff40 => self.lcd_control,
             0xff41 => self.lcd_status,
             0xff42 => self.scy,
@@ -132,7 +193,7 @@ impl Memory {
                             _ => 0x1f,
                         };
                         let prev = self.rom_bank_number;
-                        self.rom_bank_number = if value == 0 {
+                        self.rom_bank_number = if (value & 0x1f) == 0 {
                             1
                         } else {
                             (value & mask) as usize
@@ -190,6 +251,30 @@ impl Memory {
             0xff06 => self.timer_modulo = value,
             0xff07 => self.timer_control = value,
             0xff0f => self.interrupt_flag = value,
+            0xff10 => self.nr10 = value | 0x80,
+            0xff11 => self.nr11 = value,
+            0xff12 => self.nr12 = value,
+            0xff13 => self.nr13 = value,
+            0xff14 => self.nr14 = value | 0x38,
+            0xff16 => self.nr21 = value,
+            0xff17 => self.nr22 = value,
+            0xff18 => self.nr23 = value,
+            0xff19 => self.nr24 = value | 0x38,
+            0xff1a => self.nr30 = value | 0x7f,
+            0xff1b => self.nr31 = value,
+            0xff1c => self.nr32 = value | 0x9f,
+            0xff1d => self.nr33 = value,
+            0xff1e => self.nr34 = value | 0x38,
+            0xff20 => self.nr41 = value | 0xc0,
+            0xff21 => self.nr42 = value,
+            0xff22 => self.nr43 = value,
+            0xff23 => self.nr44 = value | 0x3f,
+            0xff24 => self.nr50 = value,
+            0xff26 => {
+                let prev = self.nr52;
+                self.nr52 = (value & (1 << 7)) | 0x70 | (prev & 0xf);
+            }
+            0xff30..=0xff3f => self.wave_ram[address - 0xff30] = value,
             0xff40 => self.lcd_control = value,
             0xff41 => self.lcd_status = value,
             0xff42 => self.scy = value,
@@ -198,7 +283,7 @@ impl Memory {
             0xff45 => self.lyc = value,
             0xff46 => {
                 // writing to this register starts a DMA transfer from ROM or RAM to OAM.
-                for i in 0..0x9f {
+                for i in 0..=0x9f {
                     let src = ((value as u16) << 8) | i;
                     let dst = 0xfe00 | i;
                     let byte = self.get_byte(src);

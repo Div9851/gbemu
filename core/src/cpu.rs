@@ -18,6 +18,8 @@ pub struct CPU {
     pub prev_inst: Option<InstKind>,
     pub current_inst: Option<InstKind>,
     pub clocks_to_finish: usize,
+    pub clock_counter: usize,
+    pub tmp: usize,
     pub main_inst_table: Vec<Option<Inst>>,
     pub sub_inst_table: Vec<Inst>,
     pub is_halt: bool,
@@ -34,6 +36,8 @@ impl CPU {
             prev_inst: None,
             current_inst: None,
             clocks_to_finish: 0,
+            clock_counter: 0,
+            tmp: 0,
             main_inst_table,
             sub_inst_table,
             is_halt: false,
@@ -327,39 +331,60 @@ impl CPU {
         match inst {
             InstKind::Nop => {}
             InstKind::Load8(dst, src) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let value = self.get8(src);
                 self.set8(dst, value);
             }
             InstKind::LoadIncFromA => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let hl = self.registers.get_hl();
                 let value = self.registers.a;
                 self.memory.borrow_mut().set_byte(hl, value);
                 self.registers.set_hl(hl + 1);
             }
             InstKind::LoadIncToA => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let hl = self.registers.get_hl();
                 let value = self.memory.borrow().get_byte(hl);
                 self.registers.a = value;
                 self.registers.set_hl(hl + 1);
             }
             InstKind::LoadDecFromA => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let hl = self.registers.get_hl();
                 let value = self.registers.a;
                 self.memory.borrow_mut().set_byte(hl, value);
                 self.registers.set_hl(hl - 1);
             }
             InstKind::LoadDecToA => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let hl = self.registers.get_hl();
                 let value = self.memory.borrow().get_byte(hl);
                 self.registers.a = value;
                 self.registers.set_hl(hl - 1);
             }
             InstKind::Load16(dst, src) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let value = self.get16(src);
                 self.set16(dst, value);
             }
             InstKind::AddAndLoadHL(n) => {
                 // 00hc
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.sp;
                 let b = n as u16; // sign extension
@@ -374,17 +399,26 @@ impl CPU {
                 self.registers.f = flags.into();
             }
             InstKind::Push(op) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let value = self.get16(op);
                 self.registers.sp -= 2;
                 self.memory.borrow_mut().set_word(self.registers.sp, value);
             }
             InstKind::Pop(op) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let value = self.memory.borrow_mut().get_word(self.registers.sp);
                 self.registers.sp += 2;
                 self.set16(op, value);
             }
             InstKind::Add8(op) => {
                 // z0hc
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let b = self.get8(op);
@@ -399,6 +433,9 @@ impl CPU {
             }
             InstKind::AddCarry8(op) => {
                 // z0hc
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a as u16;
                 let b = self.get8(op) as u16;
@@ -415,6 +452,9 @@ impl CPU {
             }
             InstKind::AddHL(op) => {
                 // -0hc
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.get_hl();
                 let b = self.get16(op);
@@ -428,6 +468,9 @@ impl CPU {
             }
             InstKind::AddSP(n) => {
                 // 00hc
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.sp;
                 let b = n as u16; // sign extension
@@ -443,6 +486,9 @@ impl CPU {
             }
             InstKind::Sub8(op) => {
                 // z1hc
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let b = self.get8(op);
@@ -457,6 +503,9 @@ impl CPU {
             }
             InstKind::SubCarry8(op) => {
                 // z1hc
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a as u16;
                 let b = self.get8(op) as u16;
@@ -473,6 +522,9 @@ impl CPU {
             }
             InstKind::And8(op) => {
                 // z010
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let b = self.get8(op);
@@ -486,6 +538,9 @@ impl CPU {
             }
             InstKind::Or8(op) => {
                 // z000
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let b = self.get8(op);
@@ -499,6 +554,9 @@ impl CPU {
             }
             InstKind::Xor8(op) => {
                 // z000
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let b = self.get8(op);
@@ -512,6 +570,9 @@ impl CPU {
             }
             InstKind::Compare8(op) => {
                 // z1hc
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let b = self.get8(op);
@@ -523,8 +584,28 @@ impl CPU {
                 flags.c = carry;
                 self.registers.f = flags.into();
             }
+            InstKind::Inc8(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z0h-
+                if self.clock_counter == 8 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 12 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let (value, _) = a.overflowing_add(1);
+                    let half_carry = ((a & 0xf) + 1) & 0x10 == 0x10;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = half_carry;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::Inc8(op) => {
                 // z0h-
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let (value, _) = a.overflowing_add(1);
@@ -535,8 +616,28 @@ impl CPU {
                 flags.h = half_carry;
                 self.registers.f = flags.into();
             }
+            InstKind::Dec8(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z1h-
+                if self.clock_counter == 8 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 12 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let (value, _) = a.overflowing_sub(1);
+                    let half_carry = (a & 0xf) < 1;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = true;
+                    flags.h = half_carry;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::Dec8(op) => {
                 // z1h-
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let (value, _) = a.overflowing_sub(1);
@@ -548,11 +649,17 @@ impl CPU {
                 self.registers.f = flags.into();
             }
             InstKind::Inc16(op) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let a = self.get16(op);
                 let value = a.wrapping_add(1);
                 self.set16(op, value);
             }
             InstKind::Dec16(op) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let a = self.get16(op);
                 let value = a.wrapping_sub(1);
                 self.set16(op, value);
@@ -560,6 +667,9 @@ impl CPU {
             InstKind::DecimalAdjustA => {
                 // z-0c
                 //ref: https://ehaskins.com/2018-01-30%20Z80%20DAA/
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let mut correction = 0;
@@ -584,6 +694,9 @@ impl CPU {
             }
             InstKind::ComplementA => {
                 // -11-
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 self.registers.a ^= 0xff;
                 flags.n = true;
@@ -592,6 +705,9 @@ impl CPU {
             }
             InstKind::RotateALeft => {
                 // 000c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let value = ((a & 0x7f) << 1) + ((a >> 7) & 1);
@@ -605,6 +721,9 @@ impl CPU {
             }
             InstKind::RotateALeftCarry => {
                 // 000c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let c = if flags.c { 1 } else { 0 };
@@ -619,6 +738,9 @@ impl CPU {
             }
             InstKind::RotateARight => {
                 // 000c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let value = ((a & 0xfe) >> 1) + ((a & 1) << 7);
@@ -632,6 +754,9 @@ impl CPU {
             }
             InstKind::RotateARightCarry => {
                 // 000c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.registers.a;
                 let c = if flags.c { 1 } else { 0 };
@@ -644,8 +769,29 @@ impl CPU {
                 flags.c = carry;
                 self.registers.f = flags.into();
             }
+            InstKind::RotateLeft(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z00c
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let value = ((a & 0x7f) << 1) + ((a >> 7) & 1);
+                    let carry = (a & (1 << 7)) != 0;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = false;
+                    flags.c = carry;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::RotateLeft(op) => {
                 // z00c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let value = ((a & 0x7f) << 1) + ((a >> 7) & 1);
@@ -657,8 +803,30 @@ impl CPU {
                 flags.c = carry;
                 self.registers.f = flags.into();
             }
+            InstKind::RotateLeftCarry(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z00c
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let c = if flags.c { 1 } else { 0 };
+                    let value = ((a & 0x7f) << 1) + c;
+                    let carry = (a & (1 << 7)) != 0;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = false;
+                    flags.c = carry;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::RotateLeftCarry(op) => {
                 // z00c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let c = if flags.c { 1 } else { 0 };
@@ -671,8 +839,29 @@ impl CPU {
                 flags.c = carry;
                 self.registers.f = flags.into();
             }
+            InstKind::RotateRight(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z00c
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let value = ((a & 0xfe) >> 1) + ((a & 1) << 7);
+                    let carry = (a & 1) != 0;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = false;
+                    flags.c = carry;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::RotateRight(op) => {
                 // z00c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let value = ((a & 0xfe) >> 1) + ((a & 1) << 7);
@@ -684,8 +873,30 @@ impl CPU {
                 flags.c = carry;
                 self.registers.f = flags.into();
             }
+            InstKind::RotateRightCarry(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z00c
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let c = if flags.c { 1 } else { 0 };
+                    let value = ((a & 0xfe) >> 1) + (c << 7);
+                    let carry = (a & 1) != 0;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = false;
+                    flags.c = carry;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::RotateRightCarry(op) => {
                 // z00c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let c = if flags.c { 1 } else { 0 };
@@ -698,8 +909,29 @@ impl CPU {
                 flags.c = carry;
                 self.registers.f = flags.into();
             }
+            InstKind::ShiftLeftArithmetic(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z00c
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let value = (a & 0x7f) << 1;
+                    let carry = (a & (1 << 7)) != 0;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = false;
+                    flags.c = carry;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::ShiftLeftArithmetic(op) => {
                 // z00c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let value = (a & 0x7f) << 1;
@@ -711,8 +943,29 @@ impl CPU {
                 flags.c = carry;
                 self.registers.f = flags.into();
             }
+            InstKind::ShiftRightArithmetic(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z00c
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let msb = a & (1 << 7);
+                    let value = ((a & 0xfe) >> 1) + msb;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = false;
+                    flags.c = (a & 1) != 0;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::ShiftRightArithmetic(op) => {
                 // z00c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let msb = a & (1 << 7);
@@ -724,8 +977,29 @@ impl CPU {
                 flags.c = (a & 1) != 0;
                 self.registers.f = flags.into();
             }
+            InstKind::ShiftRightLogical(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z00c
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let value = (a & 0xfe) >> 1;
+                    let carry = (a & 1) != 0;
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = false;
+                    flags.c = carry;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::ShiftRightLogical(op) => {
                 // z00c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let value = (a & 0xfe) >> 1;
@@ -737,8 +1011,28 @@ impl CPU {
                 flags.c = carry;
                 self.registers.f = flags.into();
             }
+            InstKind::Swap(op @ Operand8::Address(Operand16::RegHL)) => {
+                // z000
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let mut flags = Flags::from(self.registers.f);
+                    let a = self.tmp as u8;
+                    let value = ((a & 0xf0) >> 4) + ((a & 0xf) << 4);
+                    self.set8(op, value);
+                    flags.z = value == 0;
+                    flags.n = false;
+                    flags.h = false;
+                    flags.c = false;
+                    self.registers.f = flags.into();
+                }
+            }
             InstKind::Swap(op) => {
                 // z000
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 let value = ((a & 0xf0) >> 4) + ((a & 0xf) << 4);
@@ -751,6 +1045,9 @@ impl CPU {
             }
             InstKind::TestBit(n, op) => {
                 // z01-
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 let a = self.get8(op);
                 flags.z = ((a >> n) & 1) == 0;
@@ -758,18 +1055,47 @@ impl CPU {
                 flags.h = true;
                 self.registers.f = flags.into();
             }
+            InstKind::SetBit(n, op @ Operand8::Address(Operand16::RegHL)) => {
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let a = self.tmp as u8;
+                    let value = a | (1 << n);
+                    self.set8(op, value);
+                }
+            }
             InstKind::SetBit(n, op) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let a = self.get8(op);
                 let value = a | (1 << n);
                 self.set8(op, value);
             }
+            InstKind::ResetBit(n, op @ Operand8::Address(Operand16::RegHL)) => {
+                if self.clock_counter == 12 {
+                    let a = self.get8(op);
+                    self.tmp = a as usize;
+                } else if self.clock_counter == 16 {
+                    let a = self.tmp as u8;
+                    let value = a & (0xff ^ (1 << n));
+                    self.set8(op, value);
+                }
+            }
             InstKind::ResetBit(n, op) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let a = self.get8(op);
                 let value = a & (0xff ^ (1 << n));
                 self.set8(op, value);
             }
             InstKind::ComplementCarryFlag => {
                 // -00c
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 flags.n = false;
                 flags.h = false;
@@ -778,6 +1104,9 @@ impl CPU {
             }
             InstKind::SetCarryFlag => {
                 // -001
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let mut flags = Flags::from(self.registers.f);
                 flags.n = false;
                 flags.h = false;
@@ -785,6 +1114,9 @@ impl CPU {
                 self.registers.f = flags.into();
             }
             InstKind::Halt => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 if self.is_halt {
                     return;
                 }
@@ -800,17 +1132,29 @@ impl CPU {
             }
             InstKind::Stop => {}
             InstKind::DisableInterrupt => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 self.memory.borrow_mut().interrupt_master_enable = false;
             }
             InstKind::EnableInterrupt => {} // the effect of EI is delayed by one instruction
             InstKind::JumpImm(addr) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 self.registers.pc = addr;
             }
             InstKind::JumpHL => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let addr = self.registers.get_hl();
                 self.registers.pc = addr;
             }
             InstKind::JumpCondImm(cond, addr) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let flags = Flags::from(self.registers.f);
                 let jump_cond = match cond {
                     JumpCond::NZ => !flags.z,
@@ -822,13 +1166,20 @@ impl CPU {
                     // if jump condition is met, convert it to unconditional jump
                     self.current_inst = Some(InstKind::JumpImm(addr));
                     self.clocks_to_finish = 4;
+                    self.clock_counter = 0;
                 }
             }
             InstKind::JumpRel(offset) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let addr = self.registers.pc.wrapping_add(offset as u16);
                 self.registers.pc = addr;
             }
             InstKind::JumpCondRel(cond, offset) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let flags = Flags::from(self.registers.f);
                 let jump_cond = match cond {
                     JumpCond::NZ => !flags.z,
@@ -840,9 +1191,13 @@ impl CPU {
                     // if jump condition is met, convert it to unconditional jump
                     self.current_inst = Some(InstKind::JumpRel(offset));
                     self.clocks_to_finish = 4;
+                    self.clock_counter = 0;
                 }
             }
             InstKind::CallImm(addr) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 self.registers.sp -= 2;
                 self.memory
                     .borrow_mut()
@@ -850,6 +1205,9 @@ impl CPU {
                 self.registers.pc = addr;
             }
             InstKind::CallCondImm(cond, addr) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let flags = Flags::from(self.registers.f);
                 let jump_cond = match cond {
                     JumpCond::NZ => !flags.z,
@@ -861,14 +1219,21 @@ impl CPU {
                     // if jump condition is met, convert it to unconditional call
                     self.current_inst = Some(InstKind::CallImm(addr));
                     self.clocks_to_finish = 12;
+                    self.clock_counter = 0;
                 }
             }
             InstKind::Return => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let addr = self.memory.borrow().get_word(self.registers.sp);
                 self.registers.pc = addr;
                 self.registers.sp += 2;
             }
             InstKind::ReturnCond(cond) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let flags = Flags::from(self.registers.f);
                 let jump_cond = match cond {
                     JumpCond::NZ => !flags.z,
@@ -880,15 +1245,22 @@ impl CPU {
                     // if jump condition is met, convert it to unconditional return
                     self.current_inst = Some(InstKind::Return);
                     self.clocks_to_finish = 12;
+                    self.clock_counter = 0;
                 }
             }
             InstKind::ReturnEnableInterrupt => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 let addr = self.memory.borrow().get_word(self.registers.sp);
                 self.registers.pc = addr;
                 self.registers.sp += 2;
                 self.memory.borrow_mut().interrupt_master_enable = true;
             }
             InstKind::Restart(addr) => {
+                if self.clock_counter < self.clocks_to_finish {
+                    return;
+                }
                 self.registers.sp -= 2;
                 self.memory
                     .borrow_mut()
@@ -905,6 +1277,7 @@ impl CPU {
             if self.is_halt && interrupt == 0 {
                 self.current_inst = Some(InstKind::Halt);
                 self.clocks_to_finish = 4;
+                self.clock_counter = 0;
             } else if self.memory.borrow().interrupt_master_enable && interrupt != 0 {
                 for (i, addr) in INTERRUPT_HANDLER.iter().enumerate() {
                     if interrupt & (1 << i) != 0 {
@@ -912,6 +1285,7 @@ impl CPU {
                         self.memory.borrow_mut().interrupt_flag ^= 1 << i;
                         self.current_inst = Some(InstKind::CallImm(*addr));
                         self.clocks_to_finish = 20;
+                        self.clock_counter = 0;
                         break;
                     }
                 }
@@ -920,13 +1294,17 @@ impl CPU {
                 let inst = self.decode();
                 self.current_inst = Some(inst.kind);
                 self.clocks_to_finish = inst.clocks;
+                self.clock_counter = 0;
                 self.is_halt = false;
             }
         }
-        self.clocks_to_finish -= 1;
-        if self.clocks_to_finish == 0 {
-            let inst = self.current_inst.take().unwrap();
+        self.clock_counter += 1;
+        if (self.clock_counter & 0x3) == 0 {
+            let inst = self.current_inst.unwrap();
             self.execute(inst);
+        }
+        if self.clock_counter == self.clocks_to_finish {
+            let inst = self.current_inst.take().unwrap();
             if let Some(InstKind::EnableInterrupt) = self.prev_inst {
                 self.memory.borrow_mut().interrupt_master_enable = true;
             }
