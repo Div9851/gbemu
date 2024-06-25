@@ -4,6 +4,7 @@ use crate::cpu::{Flags, CPU};
 use crate::memory::Memory;
 use crate::ppu::PPU;
 use crate::timer::Timer;
+use js_sys;
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
@@ -62,6 +63,7 @@ pub struct Emulator {
     timer: Timer,
     memory: Rc<RefCell<Memory>>,
     joypad_input: JoypadInput,
+    transferring_data: bool,
     pub running: bool,
 }
 
@@ -77,6 +79,7 @@ impl Emulator {
             timer: Timer::new(Rc::clone(&memory)),
             memory,
             joypad_input: JoypadInput::default(),
+            transferring_data: false,
             running: false,
         }
     }
@@ -223,5 +226,25 @@ impl Emulator {
             }
         }
         self.memory.borrow_mut().joypad = next_joypad;
+    }
+
+    pub fn send_data(&mut self, send_func: &js_sys::Function) {
+        let serial_transfer_data = self.memory.borrow().serial_transfer_data;
+        let serial_transfer_control = self.memory.borrow().serial_transfer_control;
+        if !self.transferring_data && (serial_transfer_control & (1 << 7) != 0) {
+            self.transferring_data = true;
+            let this = JsValue::null();
+            let x = JsValue::from(serial_transfer_data);
+            let _ = send_func.call1(&this, &x);
+        }
+    }
+
+    pub fn receive_data(&mut self, data: u8) -> u8 {
+        let prev = self.memory.borrow().serial_transfer_data;
+        self.transferring_data = false;
+        self.memory.borrow_mut().serial_transfer_data = data;
+        self.memory.borrow_mut().serial_transfer_control &= 0x7f;
+        self.memory.borrow_mut().interrupt_flag |= 1 << 3;
+        prev
     }
 }

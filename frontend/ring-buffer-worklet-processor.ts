@@ -1,15 +1,16 @@
-import { RingBuffer } from "./ringbuf.js"
+import { RingBuffer } from "./ringbuf"
 
 class RingBufferWorkletProcessor extends AudioWorkletProcessor {
-    constructor(...args) {
-        super(...args);
+    ringBuffer: RingBuffer
+    constructor() {
+        super();
         this.ringBuffer = new RingBuffer(new ArrayBuffer(65536));
         this.port.onmessage = (e) => {
             this.ringBuffer.push(e.data);
         }
     }
 
-    process(inputs, outputs, parameters) {
+    process(input: Float32Array[][], outputs: Float32Array[][], parameters: Record<string, Float32Array>): boolean {
         const output = outputs[0];
         const channel = output[0];
         this.ringBuffer.pop(channel);

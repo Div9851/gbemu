@@ -1,16 +1,26 @@
-import wasmInit, { Emulator, InitOutput, JoypadInput } from "./wasm/gbemu_core.js"
+import wasmInit, { Emulator, InitOutput, JoypadInput } from "./wasm/gbemu_core"
+// @ts-ignore
+import workletUrl from "worklet:./ring-buffer-worklet-processor"
+import { io, Socket } from "socket.io-client"
 
 let wasm: InitOutput | null = null;
 let emulator: Emulator | null = null;
 let audioCtx: AudioContext | null = null;
 let ringBufferNode: AudioWorkletNode | null = null;
+let socket: Socket | null = null;
+let myID: string | null = null;
+let opponentID: string | null = null;
+let isReady = false;
 
 const screen = document.getElementById("screen") as HTMLCanvasElement;
 const romInput = document.getElementById("rom") as HTMLInputElement;
 const savedataInput = document.getElementById("savedata") as HTMLInputElement;
+const friendIdInput = document.getElementById("friend-id") as HTMLInputElement;
 const selectRom = document.getElementById("select-rom") as HTMLButtonElement;
 const importSavedata = document.getElementById("import-savedata") as HTMLButtonElement;
 const exportSavedata = document.getElementById("export-savedata") as HTMLButtonElement;
+const joinServer = document.getElementById("join-server") as HTMLButtonElement;
+const searchFriend = document.getElementById("search-friend") as HTMLButtonElement;
 
 let prevTime: number | null = null;
 const targetPeriod: number = 1000 / 60;
@@ -112,6 +122,19 @@ const nextFrame = (currentTime: number) => {
         return;
     }
     emulator.update_joypad_input(JoypadInput.new(startPressed, selectPressed, buttonAPressed, buttonBPressed, downPressed, upPressed, leftPressed, rightPressed));
+    if (isReady) {
+        emulator.send_data((data: number) => {
+            socket?.emit("data-transfer", {
+                from: myID,
+                to: opponentID,
+                data: data,
+            });
+        });
+    } else {
+        emulator.send_data((data: number) => {
+            console.log(`serial data: 0x${data}`);
+        });
+    }
     emulator.next_frame();
     render(screen, emulator.get_frame_buffer());
     ringBufferNode?.port.postMessage(emulator.get_audio_buffer());
@@ -132,8 +155,8 @@ const romInputChangeHandler = async () => {
     emulator.init();
     emulator.load_rom(romData);
     emulator.run();
-    audioCtx = new AudioContext({ sampleRate: 48000 });
-    await audioCtx.audioWorklet.addModule("ring-buffer-worklet-processor.js");
+    audioCtx = new AudioContext({ sampleRate: 4194304 / 87 });
+    await audioCtx.audioWorklet.addModule(workletUrl);
     ringBufferNode = new AudioWorkletNode(
         audioCtx,
         "ring-buffer-worklet-processor",
@@ -168,11 +191,72 @@ const exportSavedataHandler = () => {
     a.click();
 }
 
+const joinServerHandler = () => {
+    if (socket != null) {
+        alert("You already joined the game server");
+        return;
+    }
+    socket = io("ws://localhost:3000");
+
+    socket.on("connect", () => {
+        console.log("Joined the game server");
+    });
+
+    socket.on("notify-friend-id", (arg) => {
+        myID = arg;
+        alert(`Your friend ID is ${arg}`);
+        console.log(`Your friend ID is ${arg}`);
+    });
+
+    socket.on("connection-request", ({ from }: { from: string }) => {
+        opponentID = from;
+        console.log(`received connection request from ${opponentID}`);
+        socket?.emit("connection-request-ack", {
+            from: myID,
+            to: opponentID,
+        });
+        isReady = true;
+    });
+
+    socket.on("connection-request-ack", ({ from }: { from: string }) => {
+        console.log(`connection request to ${from} has been accepted`);
+        isReady = true;
+    });
+
+    socket.on("data-transfer", ({ from, data }: { from: string, data: number }) => {
+        if (emulator == null || from !== opponentID) {
+            return;
+        }
+        console.log(`receive 0x${data.toString(16)} from ${opponentID}`)
+        const prev = emulator.receive_data(data);
+        socket?.emit("data-transfer-reply", { from: myID, to: opponentID, data: prev });
+    });
+
+    socket.on("data-transfer-reply", ({ from, data }: { from: string, data: number }) => {
+        if (emulator == null || from !== opponentID) {
+            return;
+        }
+        console.log(`receive 0x${data.toString(16)} from ${opponentID}`)
+        emulator.receive_data(data);
+    });
+}
+
+const searchFriendHandler = () => {
+    opponentID = friendIdInput.value;
+    console.log(`sent connection request to ${opponentID}`)
+    socket?.emit("connection-request", {
+        from: myID,
+        to: opponentID,
+    });
+}
+
 romInput.addEventListener("change", romInputChangeHandler);
 savedataInput.addEventListener("change", savedataInputChangeHandler);
 selectRom.addEventListener("click", () => romInput.click());
 importSavedata.addEventListener("click", () => savedataInput.click());
 exportSavedata.addEventListener("click", exportSavedataHandler);
+joinServer.addEventListener("click", joinServerHandler);
+searchFriend.addEventListener("click", searchFriendHandler);
 
 const init = async () => {
     wasm = await wasmInit();

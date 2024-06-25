@@ -2,12 +2,21 @@
   "name": "frontend",
   "version": "1.0.0",
   "description": "gameboy emulator frontend",
+  "source": "index.html",
   "scripts": {
-    "watch": "tsc -w"
+    "start": "parcel",
+    "build": "parcel build"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@parcel/transformer-worklet": "^2.9.3",
+    "@types/audioworklet": "^0.0.50",
+    "buffer": "^6.0.3",
+    "parcel": "^2.9.3",
     "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.2"
   }
 }
